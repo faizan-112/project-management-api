@@ -1,38 +1,50 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Put, UseGuards } from '@nestjs/common';
+import { 
+  Controller, Get, Post, Body, Put, Param, Delete, UseGuards, Request, NotFoundException, ForbiddenException
+} from '@nestjs/common';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { JwtAuthGuard } from '../auth/auth.guard';
 import { ProjectService } from './project.service';
 import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
 
-@UseGuards(JwtAuthGuard) 
 @Controller('projects')
 export class ProjectController {
   constructor(private readonly projectService: ProjectService) {}
 
-  @Get()
-  findAll() {
-    return this.projectService.findAll();
-  }
-
+  @UseGuards(JwtAuthGuard)  
   @Post()
-  create(@Body() createProjectDto: CreateProjectDto) {
-    return this.projectService.create(createProjectDto);
+  async create(@Request() req, @Body() createProjectDto: CreateProjectDto) {
+      console.log('Authenticated User:', req.user);  
+      
+      if (!req.user || !req.user.id) {
+          throw new ForbiddenException('User not authenticated or missing userId');
+      }
+
+      return this.projectService.createProject(createProjectDto, req.user.id);
   }
 
+  @UseGuards(JwtAuthGuard) 
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.projectService.findOne(id);
+  async findOne(@Request() req, @Param('id') id: string) {
+    return this.projectService.findOne(id, req.user.id);
   }
 
-  @UseGuards(RolesGuard) 
+  @UseGuards(JwtAuthGuard, RolesGuard)  
+  @Roles('admin', 'owner')
   @Put(':id')
-  update(@Param('id') id: string, @Body() updateProjectDto: UpdateProjectDto) {
-    return this.projectService.update(id, updateProjectDto);
+  async update(@Request() req, @Param('id') id: string, @Body() updateProjectDto: UpdateProjectDto) {
+    console.log('Update request by:', req.user?.id);  
+
+    return this.projectService.update(id, updateProjectDto, req.user.id);
   }
 
+  @UseGuards(JwtAuthGuard, RolesGuard)  
+  @Roles('admin', 'owner') 
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.projectService.remove(id);
+  async remove(@Request() req, @Param('id') id: string) {
+    console.log('Delete request by:', req.user?.id);  
+
+    return this.projectService.remove(id, req.user.id);
   }
 }

@@ -1,9 +1,12 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Query, UseGuards } from '@nestjs/common';
+import { 
+  Controller, Get, Post, Body, Patch, Param, Delete, Query, UseGuards, Request, ForbiddenException
+} from '@nestjs/common';
 import { TaskService } from './task.service';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { JwtAuthGuard } from '../auth/auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
 
 @UseGuards(JwtAuthGuard)  
 @Controller('tasks')
@@ -11,33 +14,42 @@ export class TaskController {
   constructor(private readonly taskService: TaskService) {}
 
   @Post()
-  create(@Body() createTaskDto: CreateTaskDto) {
-    return this.taskService.create(createTaskDto);
+  create(@Request() req, @Body() createTaskDto: CreateTaskDto) {
+    console.log('Authenticated User:', req.user);  
+
+    if (!req.user || !req.user.id) {
+        throw new ForbiddenException('User not authenticated or missing userId');
+    }
+
+    return this.taskService.create(createTaskDto, req.user.id);
   }
 
   @Get()
-  findAll(@Query('status') status?: string, @Query('assignedUserId') assignedUserId?: string) {
-    return this.taskService.findFiltered(status, assignedUserId);
+  findAll(@Request() req, @Query('status') status?: string) {
+    return this.taskService.findFiltered(req.user.id, status); 
   }
 
   @Get('projects/:projectId') 
-  findByProject(@Param('projectId') projectId: string, @Query('status') status?: string) {
-    return this.taskService.findByProject(projectId, status);
+  findByProject(@Request() req, @Param('projectId') projectId: string, @Query('status') status?: string) {
+    return this.taskService.findByProject(projectId, req.user.id, status); 
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.taskService.findOne(id);
+  findOne(@Request() req, @Param('id') id: string) {
+    return this.taskService.findOne(id, req.user.id);
   }
 
   @UseGuards(RolesGuard)  
+  @Roles('admin', 'owner', 'manager')
   @Patch(':id')
-  update(@Param('id') id: string, @Body() updateTaskDto: UpdateTaskDto) {
-    return this.taskService.update(id, updateTaskDto);
+  update(@Request() req, @Param('id') id: string, @Body() updateTaskDto: UpdateTaskDto) {
+    return this.taskService.update(id, updateTaskDto, req.user.id);
   }
 
+  @UseGuards(JwtAuthGuard, RolesGuard)  
+  @Roles('admin', 'owner') 
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.taskService.remove(id);
+  remove(@Request() req, @Param('id') id: string) {
+    return this.taskService.remove(id, req.user.id);
   }
 }
